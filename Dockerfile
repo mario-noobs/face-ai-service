@@ -7,13 +7,14 @@ RUN apt-get update && \
 WORKDIR /app
 
 # Install dependencies first for layer caching
-COPY pyproject.toml .
+COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir .
+    pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
+COPY pyproject.toml .
 COPY src/ src/
-RUN pip install --no-cache-dir -e .
+RUN pip install --no-cache-dir --no-deps .
 
 # Create model cache directory
 RUN mkdir -p /app/model_cache
