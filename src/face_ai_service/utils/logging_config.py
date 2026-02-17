@@ -6,10 +6,13 @@ from datetime import datetime, timezone
 
 class JSONFormatter(logging.Formatter):
     def format(self, record):
+        from face_ai_service.utils.request_context import get_request_id
+
         log_entry = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "level": record.levelname,
             "logger": record.name,
+            "request_id": get_request_id(),
             "message": record.getMessage(),
         }
         if record.exc_info and record.exc_info[0] is not None:

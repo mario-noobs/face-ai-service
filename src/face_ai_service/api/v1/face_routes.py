@@ -1,11 +1,12 @@
 import logging
+import time
 
 from flask import Blueprint, current_app, jsonify, request
 
 from face_ai_service.schemas.exceptions import FaceAIException
 from face_ai_service.schemas.messages import Messages
 from face_ai_service.schemas.requests import EncodeRequest, SearchRequest
-from face_ai_service.schemas.responses import error_response, success_response
+from face_ai_service.schemas.responses import success_response
 from face_ai_service.utils.image_helpers import base64_to_numpy_image, is_valid_base64_image
 
 logger = logging.getLogger(__name__)
@@ -40,12 +41,22 @@ def encode():
             f"Recognition model not loaded: {req.algorithmReg}",
         )
 
+    image_size_kb = len(req.imageBase64) * 3 / 4 / 1024
+    logger.debug(
+        "encode: image_size=%.1fKB det=%s reg=%s",
+        image_size_kb, req.algorithmDet, req.algorithmReg,
+    )
+
     image_np = base64_to_numpy_image(req.imageBase64)
     result = engine.encode_face(image_np, req.algorithmDet, req.algorithmReg)
 
     if result is None:
         raise FaceAIException(Messages.NO_FACE)
 
+    logger.debug(
+        "encode: success confidence=%.4f bbox=%s",
+        result.get("confidence", 0), result.get("bbox"),
+    )
     return jsonify(success_response(result))
 
 
@@ -79,6 +90,12 @@ def search():
             f"Recognition model not loaded: {req.algorithmReg}",
         )
 
+    image_size_kb = len(req.imageBase64) * 3 / 4 / 1024
+    logger.debug(
+        "search: image_size=%.1fKB candidates=%d det=%s reg=%s threshold=%s",
+        image_size_kb, len(req.candidates), req.algorithmDet, req.algorithmReg, req.threshold,
+    )
+
     image_np = base64_to_numpy_image(req.imageBase64)
 
     candidates_dicts = [
@@ -97,4 +114,11 @@ def search():
     if result is None:
         raise FaceAIException(Messages.NO_FACE)
 
+    matched_count = sum(1 for m in result.get("matches", []) if m["matched"])
+    logger.debug(
+        "search: matches=%d/%d distances=%s",
+        matched_count,
+        len(result.get("matches", [])),
+        [{"userId": m["userId"], "dist": m["distance"], "matched": m["matched"]} for m in result.get("matches", [])],
+    )
     return jsonify(success_response(result))

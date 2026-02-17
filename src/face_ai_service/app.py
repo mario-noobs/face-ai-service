@@ -6,6 +6,7 @@ from face_ai_service.api.error_handlers import register_error_handlers
 from face_ai_service.api.v1 import face_bp, health_bp
 from face_ai_service.config import get_config
 from face_ai_service.core.inference_engine import InferenceEngine
+from face_ai_service.logging import register_request_logging
 from face_ai_service.storage.model_store import ModelStore
 from face_ai_service.utils.logging_config import configure_logging
 
@@ -22,6 +23,9 @@ def create_app(config_name: str = None) -> Flask:
 
     # Register error handlers
     register_error_handlers(app)
+
+    # Register request logging middleware
+    register_request_logging(app)
 
     # Register blueprints
     app.register_blueprint(health_bp)

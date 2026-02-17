@@ -1,5 +1,6 @@
 import base64
 import logging
+import time
 
 import numpy as np
 import torch
@@ -254,9 +255,13 @@ class InferenceEngine:
             dict with keys: encoding (base64), encoding_shape, confidence, bbox,
             algorithmDet, algorithmReg
         """
+        t0 = time.perf_counter()
+
         boxes_conf_landms, old_image = self._detect_faces(image_np, det_algorithm)
+        t_det = time.perf_counter()
 
         if boxes_conf_landms is None:
+            logger.debug("encode_face: no face detected (detection=%.0fms)", (t_det - t0) * 1000)
             return None
 
         best_face = self._select_best_face(boxes_conf_landms)
@@ -264,12 +269,19 @@ class InferenceEngine:
             return None
 
         face_encoding = self._encode_single_face(old_image, best_face, reg_algorithm)
+        t_enc = time.perf_counter()
 
         encoding_bytes = face_encoding.tobytes()
         encoding_base64 = base64.b64encode(encoding_bytes).decode("utf-8")
 
         bbox = [float(best_face[0]), float(best_face[1]), float(best_face[2]), float(best_face[3])]
         confidence = float(best_face[4])
+
+        logger.debug(
+            "encode_face: faces_found=%d confidence=%.4f detection=%.0fms encoding=%.0fms total=%.0fms",
+            len(boxes_conf_landms), confidence,
+            (t_det - t0) * 1000, (t_enc - t_det) * 1000, (t_enc - t0) * 1000,
+        )
 
         return {
             "encoding": encoding_base64,
@@ -303,10 +315,17 @@ class InferenceEngine:
         if threshold is None:
             threshold = self.default_threshold
 
+        logger.debug(
+            "search_faces: candidates=%d threshold=%.3f det=%s reg=%s",
+            len(candidates), threshold, det_algorithm, reg_algorithm,
+        )
+
         # Encode the query face
+        t0 = time.perf_counter()
         encode_result = self.encode_face(image_np, det_algorithm, reg_algorithm)
         if encode_result is None:
             return None
+        t_enc = time.perf_counter()
 
         query_encoding_bytes = base64.b64decode(encode_result["encoding"])
         query_encoding = np.frombuffer(query_encoding_bytes, dtype=np.float32)
@@ -328,6 +347,14 @@ class InferenceEngine:
 
         # Sort by distance ascending
         matches.sort(key=lambda m: m["distance"])
+        t_cmp = time.perf_counter()
+
+        matched_count = sum(1 for m in matches if m["matched"])
+        logger.debug(
+            "search_faces: matched=%d/%d encode=%.0fms compare=%.0fms total=%.0fms",
+            matched_count, len(matches),
+            (t_enc - t0) * 1000, (t_cmp - t_enc) * 1000, (t_cmp - t0) * 1000,
+        )
 
         return {
             "query_encoding": encode_result["encoding"],
